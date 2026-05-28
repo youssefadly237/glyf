@@ -1,0 +1,35 @@
+[package]
+name = "glyf"
+description = "Glyph finder"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/youssefadly237/glyf"
+keywords = ["Glyph", "Unicode", "nerdfonts"]
+authors = ["J. Adly <youssefadly237@gmail.com>"]
+documentation = "https://docs.rs/glyf"
+
+[lib]
+name = "glyf"
+path = "src/lib.rs"
+
+[[bin]]
+name = "glyf"
+path = "src/bin/glyf.rs"
+
+[[bench]]
+name = "bench"
+harness = false
+
+[dependencies]
+clap = { version = "4.6.1", default-features = false, features = ["derive", "help", "usage", "error-context", "std"] }
+frizbee = "0.9.0"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[dev-dependencies]
+divan = "0.1.21"
