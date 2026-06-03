@@ -56,7 +56,7 @@ impl Frecency {
 }
 
 impl Frecency {
-    fn path() -> PathBuf {
+    pub fn path() -> PathBuf {
         let base = std::env::var("XDG_DATA_HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
@@ -64,7 +64,7 @@ impl Frecency {
                 if home.is_empty() {
                     return std::env::temp_dir();
                 }
-                PathBuf::from(home).join(".local/share/glyf")
+                PathBuf::from(home).join(".local/share")
             });
         let dir = base.join("glyf");
         fs::create_dir_all(&dir).ok();

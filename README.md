@@ -21,6 +21,29 @@ glyf --sort <field>         # sort by: relevance (default), name, codepoint
 Frequently picked codepoints float to the top of empty and fuzzy searches.
 Records are persisted to `$XDG_DATA_HOME/glyf/frecency.bin`
 
+### Lua module
+
+Build with `cargo build --features mlua --release` to produce `libglyf.so`.
+
+```lua
+local glyf = require("glyf")
+
+-- fuzzy search; opts: limit (50), max_typos (nil = no limit), sort (relevance/name/codepoint)
+glyf.search("lua", { limit = 10, sort = "name" })
+
+-- lookup by codepoint string: U+0041, 0x279F, A, etc.
+glyf.lookup("U+1F600")
+
+-- record a pick in frecency db
+glyf.record(0x1F600)
+
+-- get frecency count for a codepoint
+glyf.frecency_get(0x0041)
+
+-- path to frecency db file
+glyf.frecency_path()
+```
+
 ### Neovim plugin
 
 coming soon
