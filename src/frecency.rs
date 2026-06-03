@@ -40,7 +40,9 @@ impl Frecency {
 
 impl Drop for Frecency {
     fn drop(&mut self) {
-        let _ = self.flush();
+        if let Err(e) = self.flush() {
+            eprintln!("frecency save failed: {e}");
+        }
     }
 }
 
@@ -66,9 +68,7 @@ impl Frecency {
                 }
                 PathBuf::from(home).join(".local/share")
             });
-        let dir = base.join("glyf");
-        fs::create_dir_all(&dir).ok();
-        dir.join("frecency.bin")
+        base.join("glyf/frecency.bin")
     }
 
     fn read(path: &Path) -> HashMap<u32, u32> {
@@ -92,6 +92,9 @@ impl Frecency {
     }
 
     fn write(&self) -> io::Result<()> {
+        if let Some(dir) = self.path.parent() {
+            fs::create_dir_all(dir)?;
+        }
         let mut sorted: Vec<(u32, u32)> = self.entries.iter().map(|(&k, &v)| (k, v)).collect();
         sorted.sort_unstable_by_key(|&(cp, _)| cp);
         let mut bytes = Vec::with_capacity(sorted.len() * 8);

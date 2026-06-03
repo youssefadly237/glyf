@@ -1,7 +1,7 @@
 [package]
 name = "glyf"
 description = "Glyph finder"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/youssefadly237/glyf"
@@ -15,6 +15,8 @@ path = "src/lib.rs"
 crate-type = ["lib", "cdylib"]
 
 [features]
+default = []
+cjk = []
 mlua = ["dep:mlua"]
 
 [[bin]]

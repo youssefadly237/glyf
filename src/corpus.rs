@@ -1,76 +1,136 @@
-use std::sync::LazyLock;
+use std::cmp::Ordering;
 
-static CORPUS_TSV: &str = include_str!("../data/corpus.tsv");
-static ENTRIES: LazyLock<Vec<Entry<'static>>> = LazyLock::new(|| parse_corpus(CORPUS_TSV));
+include!(concat!(env!("OUT_DIR"), "/field_consts.rs"));
+include!(concat!(env!("OUT_DIR"), "/binary_data.rs"));
+include!(concat!(env!("OUT_DIR"), "/metadata_data.rs"));
+include!(concat!(env!("OUT_DIR"), "/category_data.rs"));
 
-pub fn parse_corpus(tsv: &str) -> Vec<Entry<'_>> {
-    let mut entries: Vec<Entry<'_>> = tsv.lines().filter_map(Entry::parse).collect();
-    entries.sort_unstable_by_key(|e| e.codepoint);
-    entries
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Idx(pub u32);
+
+fn get_u32(data: &[u8], i: usize) -> u32 {
+    u32::from_le_bytes(data[i * 4..][..4].try_into().unwrap())
 }
 
-#[derive(Debug, Clone)]
-pub struct Entry<'a> {
-    pub codepoint: u32,
-    pub glyph: &'a str,
-    pub name: &'a str,
-    pub source: &'a str,
-    pub category: &'a str,
-    pub combining: &'a str,
-    pub bidi: &'a str,
-    pub decomp: &'a str,
-    pub decimal: &'a str,
-    pub digit: &'a str,
-    pub numeric: &'a str,
-    pub mirrored: &'a str,
-    pub alt_name: &'a str,
-    pub uppercase: &'a str,
-    pub lowercase: &'a str,
-    pub titlecase: &'a str,
+fn get_u16(data: &[u8], i: usize) -> u16 {
+    u16::from_le_bytes(data[i * 2..][..2].try_into().unwrap())
 }
 
-impl<'a> Entry<'a> {
-    fn parse(line: &'a str) -> Option<Self> {
-        let f: Vec<&'a str> = line.split('\t').collect();
-        if f.len() < 4 {
-            return None;
-        }
-        let codepoint = f[0].parse::<u32>().ok()?;
-        Some(Entry {
-            codepoint,
-            glyph: f[1],
-            name: f[2],
-            source: f[3],
-            category: f.get(4).unwrap_or(&""),
-            combining: f.get(5).unwrap_or(&""),
-            bidi: f.get(6).unwrap_or(&""),
-            decomp: f.get(7).unwrap_or(&""),
-            decimal: f.get(8).unwrap_or(&""),
-            digit: f.get(9).unwrap_or(&""),
-            numeric: f.get(10).unwrap_or(&""),
-            mirrored: f.get(11).unwrap_or(&""),
-            alt_name: f.get(12).unwrap_or(&""),
-            uppercase: f.get(13).unwrap_or(&""),
-            lowercase: f.get(14).unwrap_or(&""),
-            titlecase: f.get(15).unwrap_or(&""),
+pub fn num_entries() -> usize {
+    CODEPOINT_DATA.len() / 4
+}
+
+pub fn codepoint(idx: Idx) -> u32 {
+    get_u32(CODEPOINT_DATA, idx.0 as usize)
+}
+
+pub fn entry_str(idx: Idx, field: usize) -> &'static str {
+    let off = get_u32(OFFSET_DATA, idx.0 as usize * NUM_FIELDS + field) as usize;
+    let len = get_u16(LENGTH_DATA, idx.0 as usize * NUM_FIELDS + field) as usize;
+    std::str::from_utf8(&STRING_DATA[off..off + len]).unwrap()
+}
+
+pub fn entry_name(idx: Idx) -> &'static str {
+    let off = get_u32(NAME_OFFSET_DATA, idx.0 as usize);
+    let len = get_u16(NAME_LENGTH_DATA, idx.0 as usize);
+    std::str::from_utf8(&STRING_DATA[off as usize..][..len as usize]).unwrap()
+}
+pub fn entry_source(idx: Idx) -> &'static str {
+    entry_str(idx, FIELD_SOURCE)
+}
+pub fn entry_category(idx: Idx) -> &'static str {
+    entry_str(idx, FIELD_CATEGORY)
+}
+pub fn entry_block(idx: Idx) -> &'static str {
+    entry_str(idx, FIELD_BLOCK)
+}
+pub fn entry_icon_set(idx: Idx) -> &'static str {
+    entry_str(idx, FIELD_ICON_SET)
+}
+
+pub fn category_of(cp: u32) -> Option<&'static str> {
+    CATEGORY_DATA
+        .binary_search_by(|&(start, end, _)| {
+            if cp < start {
+                Ordering::Greater
+            } else if cp > end {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
         })
+        .ok()
+        .map(|i| CATEGORY_DATA[i].2)
+}
+
+pub(crate) fn lower_bound(cp: u32) -> usize {
+    let data = CODEPOINT_DATA;
+    let n = data.len() / 4;
+    let mut left = 0usize;
+    let mut right = n;
+    while left < right {
+        let mid = left + (right - left) / 2;
+        if get_u32(data, mid) < cp {
+            left = mid + 1;
+        } else {
+            right = mid;
+        }
+    }
+    left
+}
+
+pub fn lookup(cp: u32) -> Option<Idx> {
+    let i = lower_bound(cp);
+    let data = CODEPOINT_DATA;
+    if i < data.len() / 4 && get_u32(data, i) == cp {
+        Some(Idx(i as u32))
+    } else {
+        None
     }
 }
 
-pub fn entries() -> &'static [Entry<'static>] {
-    &ENTRIES
-}
+include!(concat!(env!("OUT_DIR"), "/name_lookup.rs"));
 
-pub fn lookup(cp: u32) -> Option<&'static Entry<'static>> {
-    ENTRIES
-        .binary_search_by_key(&cp, |e| e.codepoint)
+pub fn lookup_name(cp: u32) -> Option<&'static str> {
+    NAME_LOOKUP
+        .binary_search_by_key(&cp, |&(c, _)| c)
         .ok()
-        .map(|i| &ENTRIES[i])
+        .map(|i| NAME_LOOKUP[i].1)
 }
 
-pub fn lookup_str(s: &str) -> Option<&'static Entry<'static>> {
+pub fn lookup_str(s: &str) -> Option<Idx> {
     let cp = parse_cp_str(s)?;
     lookup(cp)
+}
+
+pub fn list_sources() -> &'static [&'static str] {
+    SOURCES
+}
+
+pub fn list_icon_sets() -> &'static [&'static str] {
+    ICON_SETS
+}
+
+pub fn icon_set_description(name: &str) -> &'static str {
+    match name {
+        "cod" => "Codicons",
+        "custom" => "Seti and original",
+        "dev" => "Devicons",
+        "extra" => "Extra glyphs",
+        "fa" => "Font Awesome",
+        "fae" => "Font Awesome Extension",
+        "iec" => "Power Symbols IEC",
+        "indent" | "indentation" => "Extra glyphs",
+        "linux" => "Font Logos",
+        "md" => "Material Design",
+        "oct" => "Octicons",
+        "pl" => "Powerline Symbols",
+        "ple" => "Powerline Extra",
+        "pom" => "Pomicons",
+        "seti" => "Seti and original",
+        "weather" => "Weather Icons",
+        _ => "",
+    }
 }
 
 pub fn parse_cp_str(s: &str) -> Option<u32> {
@@ -92,43 +152,16 @@ pub fn parse_cp_str(s: &str) -> Option<u32> {
 mod tests {
     use super::*;
 
-    const SAMPLE_TSV: &str = "\
-65\tA\tLATIN CAPITAL LETTER A\tunicode\tLu\t0\tL\t\t\t\t\tN\t\tA\tA\tA
-66\tB\tLATIN CAPITAL LETTER B\tunicode\tLu\t0\tL\t\t\t\t\tN\t\tB\tB\tB
-128513\t\u{1F600}\tGRINNING FACE\tunicode\tSo\t0\tON\t\t\t\t\tN\t\t\t\t
-";
-
-    #[test]
-    fn parse_corpus_sorted_by_codepoint() {
-        let entries = parse_corpus(SAMPLE_TSV);
-        assert_eq!(entries.len(), 3);
-        assert_eq!(entries[0].codepoint, 65);
-        assert_eq!(entries[1].codepoint, 66);
-        assert_eq!(entries[2].codepoint, 128513);
-    }
-
-    #[test]
-    fn parse_corpus_short_line_skipped() {
-        let entries = parse_corpus("1\tA\tfoo");
-        assert!(entries.is_empty());
-    }
-
-    #[test]
-    fn parse_corpus_non_numeric_codepoint_skipped() {
-        let entries = parse_corpus("xyz\tA\tfoo\tbar");
-        assert!(entries.is_empty());
-    }
-
     #[test]
     fn lookup_hit_lower_bound() {
-        let e = lookup(0x0041).expect("A should exist");
-        assert_eq!(e.name, "LATIN CAPITAL LETTER A");
+        let idx = lookup(0x0041).expect("A should exist");
+        assert_eq!(entry_name(idx), "LATIN CAPITAL LETTER A");
     }
 
     #[test]
     fn lookup_hit_emoji() {
-        let e = lookup(0x1F600).expect("grinning face should exist");
-        assert_eq!(e.name, "GRINNING FACE");
+        let idx = lookup(0x1F600).expect("grinning face should exist");
+        assert_eq!(entry_name(idx), "GRINNING FACE");
     }
 
     #[test]
@@ -148,44 +181,44 @@ mod tests {
 
     #[test]
     fn lookup_str_uplus_format() {
-        let e = lookup_str("U+0041").expect("U+0041 should resolve");
-        assert_eq!(e.codepoint, 0x41);
+        let idx = lookup_str("U+0041").expect("U+0041 should resolve");
+        assert_eq!(codepoint(idx), 0x41);
     }
 
     #[test]
     fn lookup_str_uplus_lowercase() {
-        let e = lookup_str("u+0041").expect("u+0041 should resolve");
-        assert_eq!(e.codepoint, 0x41);
+        let idx = lookup_str("u+0041").expect("u+0041 should resolve");
+        assert_eq!(codepoint(idx), 0x41);
     }
 
     #[test]
     fn lookup_str_0x_format() {
-        let e = lookup_str("0x0041").expect("0x0041 should resolve");
-        assert_eq!(e.codepoint, 0x41);
+        let idx = lookup_str("0x0041").expect("0x0041 should resolve");
+        assert_eq!(codepoint(idx), 0x41);
     }
 
     #[test]
     fn lookup_str_hex_only() {
-        let e = lookup_str("0041").expect("0041 should resolve");
-        assert_eq!(e.codepoint, 0x41);
+        let idx = lookup_str("0041").expect("0041 should resolve");
+        assert_eq!(codepoint(idx), 0x41);
     }
 
     #[test]
     fn lookup_str_single_ascii_char() {
-        let e = lookup_str("A").expect("A should resolve");
-        assert_eq!(e.codepoint, 0x41);
+        let idx = lookup_str("A").expect("A should resolve");
+        assert_eq!(codepoint(idx), 0x41);
     }
 
     #[test]
     fn lookup_str_single_non_ascii_char() {
-        let e = lookup_str("😀").expect("emoji should resolve");
-        assert_eq!(e.codepoint, 0x1F600);
+        let idx = lookup_str("\u{1F600}").expect("emoji should resolve");
+        assert_eq!(codepoint(idx), 0x1F600);
     }
 
     #[test]
     fn lookup_str_trimmed() {
-        let e = lookup_str("  U+0041  ").expect("trimmed should resolve");
-        assert_eq!(e.codepoint, 0x41);
+        let idx = lookup_str("  U+0041  ").expect("trimmed should resolve");
+        assert_eq!(codepoint(idx), 0x41);
     }
 
     #[test]
@@ -209,17 +242,23 @@ mod tests {
     }
 
     #[test]
-    fn entries_returns_sorted() {
-        let e = entries();
-        for w in e.windows(2) {
-            assert!(w[0].codepoint <= w[1].codepoint, "entries not sorted");
+    fn entries_are_sorted() {
+        let n = num_entries();
+        for i in 1..n {
+            let prev = codepoint(Idx(i as u32 - 1));
+            let cur = codepoint(Idx(i as u32));
+            assert!(
+                prev <= cur,
+                "entries not sorted at index {i}: {prev} > {cur}"
+            );
         }
     }
 
     #[test]
-    fn entries_are_static() {
-        let e1: &[Entry<'static>] = entries();
-        let e2: &[Entry<'static>] = entries();
-        assert!(std::ptr::eq(e1, e2));
+    fn entries_lookup_roundtrip() {
+        let idx = lookup(0x0041).expect("A should exist");
+        assert_eq!(codepoint(idx), 0x0041);
+        assert_eq!(entry_str(idx, FIELD_GLYPH), "A");
+        assert_eq!(entry_name(idx), "LATIN CAPITAL LETTER A");
     }
 }

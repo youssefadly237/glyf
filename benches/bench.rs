@@ -10,42 +10,29 @@ static POPULATED_FREC: LazyLock<glyf::Frecency> = LazyLock::new(|| {
 });
 
 fn main() {
-    glyf::entries();
     LazyLock::force(&FREC);
     divan::main();
 }
 
 #[divan::bench]
-fn lookup_hit() -> Option<&'static glyf::Entry<'static>> {
+fn glyf_lookup_hit() -> Option<glyf::Idx> {
     glyf::lookup(divan::black_box(0x0041))
 }
 
 #[divan::bench]
-fn lookup_miss() -> Option<&'static glyf::Entry<'static>> {
+fn glyf_lookup_miss() -> Option<glyf::Idx> {
     glyf::lookup(divan::black_box(0xFFFF))
 }
 
 #[divan::bench]
-fn lookup_emoji() -> Option<&'static glyf::Entry<'static>> {
+fn glyf_lookup_emoji() -> Option<glyf::Idx> {
     glyf::lookup(divan::black_box(0x1F600))
 }
 
 #[divan::bench]
-fn entries_ref() -> &'static [glyf::Entry<'static>] {
-    glyf::entries()
-}
-
-#[divan::bench]
-fn parse_full_corpus() -> Vec<glyf::Entry<'static>> {
-    let tsv = include_str!("../data/corpus.tsv");
-    glyf::parse_corpus(divan::black_box(tsv))
-}
-
-#[divan::bench]
-fn search_fuzzy() -> Vec<glyf::Match<'static>> {
-    glyf::search(
+fn glyf_search_fuzzy() -> Vec<glyf::Match> {
+    glyf::search_all(
         divan::black_box("musical"),
-        glyf::entries(),
         &FREC,
         divan::black_box(10),
         divan::black_box(Some(2)),
@@ -54,10 +41,9 @@ fn search_fuzzy() -> Vec<glyf::Match<'static>> {
 }
 
 #[divan::bench]
-fn search_short() -> Vec<glyf::Match<'static>> {
-    glyf::search(
+fn glyf_search_short() -> Vec<glyf::Match> {
+    glyf::search_all(
         divan::black_box("a"),
-        glyf::entries(),
         &FREC,
         divan::black_box(10),
         divan::black_box(Some(1)),
@@ -66,10 +52,9 @@ fn search_short() -> Vec<glyf::Match<'static>> {
 }
 
 #[divan::bench]
-fn search_exact() -> Vec<glyf::Match<'static>> {
-    glyf::search(
+fn glyf_search_exact() -> Vec<glyf::Match> {
+    glyf::search_all(
         divan::black_box("MUSICAL SYMBOL COMBINING DOIT"),
-        glyf::entries(),
         &FREC,
         divan::black_box(10),
         divan::black_box(Some(0)),
@@ -78,13 +63,72 @@ fn search_exact() -> Vec<glyf::Match<'static>> {
 }
 
 #[divan::bench]
-fn search_empty() -> Vec<glyf::Match<'static>> {
-    glyf::search(
+fn glyf_search_empty() -> Vec<glyf::Match> {
+    glyf::search_all(
         divan::black_box(""),
-        glyf::entries(),
         &POPULATED_FREC,
         divan::black_box(50),
         divan::black_box(None),
         glyf::Sort::Relevance,
     )
+}
+
+fn glyf_name_of(cp: u32) -> Option<&'static str> {
+    glyf::lookup_name(cp)
+}
+
+#[divan::bench]
+fn glyf_name_ascii() -> Option<&'static str> {
+    glyf_name_of(divan::black_box(0x0041))
+}
+
+#[divan::bench]
+fn glyf_name_emoji() -> Option<&'static str> {
+    glyf_name_of(divan::black_box(0x1F600))
+}
+
+fn glyf_category_of(cp: u32) -> Option<&'static str> {
+    glyf::category_of(cp)
+}
+
+#[divan::bench]
+fn glyf_category_ascii() -> Option<&'static str> {
+    glyf_category_of(divan::black_box(0x0041))
+}
+
+#[divan::bench]
+fn glyf_category_emoji() -> Option<&'static str> {
+    glyf_category_of(divan::black_box(0x1F600))
+}
+
+#[divan::bench]
+fn glyf_block_ascii() -> Option<&'static str> {
+    glyf::block::block_of(divan::black_box(0x0041))
+}
+
+#[divan::bench]
+fn glyf_block_emoji() -> Option<&'static str> {
+    glyf::block::block_of(divan::black_box(0x1F600))
+}
+
+#[divan::bench]
+fn glyf_block_cjk() -> Option<&'static str> {
+    glyf::block::block_of(divan::black_box(0x4E00))
+}
+
+#[divan::bench]
+fn glyf_entry_name_ascii() -> &'static str {
+    let idx = glyf::lookup(divan::black_box(0x0041)).unwrap();
+    glyf::entry_name(idx)
+}
+
+#[divan::bench]
+fn glyf_entry_name_emoji() -> &'static str {
+    let idx = glyf::lookup(divan::black_box(0x1F600)).unwrap();
+    glyf::entry_name(idx)
+}
+
+#[divan::bench]
+fn glyf_block_of_boundary() -> Option<&'static str> {
+    glyf::block::block_of(divan::black_box(0x007F))
 }

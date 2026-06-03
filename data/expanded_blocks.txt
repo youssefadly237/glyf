@@ -1,0 +1,16 @@
+CJK Unified Ideographs
+CJK Unified Ideographs Extension A
+CJK Unified Ideographs Extension B
+CJK Unified Ideographs Extension C
+CJK Unified Ideographs Extension D
+CJK Unified Ideographs Extension E
+CJK Unified Ideographs Extension F
+CJK Unified Ideographs Extension G
+CJK Unified Ideographs Extension H
+CJK Unified Ideographs Extension I
+CJK Unified Ideographs Extension J
+Hangul Syllables
+Tangut
+Tangut Supplement
+Jurchen
+Seal

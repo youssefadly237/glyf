@@ -1,1 +1,11 @@
+# rust
 /target
+
+# py
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# misc
+TODO

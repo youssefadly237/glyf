@@ -10,6 +10,14 @@ glyf -c <codepoint>         # exact codepoint lookup (279f, U+279F, 0x279F)
 glyf -s <query>             # force name search
 glyf -p <codepoint>         # record a pick in frecency db
 glyf -l                     # list all entries
+glyf -b <block>             # filter by Unicode block name
+glyf -C <cat>               # filter by general category (Lu, Nd, L*, P*)
+glyf -S <source>            # filter by source (unicode, nerdfonts)
+glyf -I <set>               # filter by Nerd Fonts icon set (dev, fa, cod)
+glyf --list-blocks          # list all Unicode blocks
+glyf --list-categories      # list general categories
+glyf --list-sources         # list all sources
+glyf --list-icon-sets       # list icon sets with descriptions
 glyf -t <n>                 # typo tolerance (default: 2, 0 = exact)
 glyf -f <format>            # output format: plain, pretty, tsv
 glyf -n <n>                 # max results (default: 50)
@@ -50,7 +58,6 @@ coming soon
 
 ## Planned
 
-- Blocks (Unicode block display, search by block)
 - Emoji (emoji-data.txt + CLDR annotations keywords)
 - ratatui TUI
 - Reverse lookup for multi-character strings

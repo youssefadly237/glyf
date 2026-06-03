@@ -25,6 +25,9 @@ SOURCES = {
     "glyphnames.json": {
         "url": f"https://raw.githubusercontent.com/ryanoasis/nerd-fonts/{NERD_FONTS_REF}/glyphnames.json",
     },
+    "Blocks.txt": {
+        "url": f"https://www.unicode.org/Public/{UNICODE_VERSION}/ucd/Blocks.txt",
+    },
 }
 
 
@@ -55,31 +58,60 @@ def ensure(name: str, no_fetch: bool) -> Path:
     return dest
 
 
+def parse_blocks() -> list[tuple[int, int, str]]:
+    """Parse Blocks.txt into sorted list of (start, end, name)."""
+    blocks: list[tuple[int, int, str]] = []
+    with open(RAW / "Blocks.txt", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("@"):
+                continue
+            parts = line.split(";")
+            if len(parts) < 2:
+                continue
+            range_part, name = parts[0].strip(), parts[1].strip()
+            start_hex, _, end_hex = range_part.partition("..")
+            try:
+                start = int(start_hex, 16)
+                end = int(end_hex, 16)
+            except ValueError:
+                continue
+            blocks.append((start, end, name))
+    return blocks
+
+
+def block_for(cp: int, blocks: list[tuple[int, int, str]]) -> str:
+    lo, hi = 0, len(blocks)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        s, e, _ = blocks[mid]
+        if cp < s:
+            hi = mid
+        elif cp > e:
+            lo = mid + 1
+        else:
+            return blocks[mid][2]
+    return ""
+
+
+# Block names whose entries come from <First, Last> range expansion
+EXPANDED_BLOCKS = set(
+    line.strip()
+    for line in (ROOT / "data" / "expanded_blocks.txt").read_text(encoding="utf-8").splitlines()
+    if line.strip()
+)
+
+
 def build(no_nerd_fonts: bool, no_fetch: bool) -> None:
     ensure("UnicodeData.txt", no_fetch)
+    ensure("Blocks.txt", no_fetch)
     if not no_nerd_fonts:
         ensure("glyphnames.json", no_fetch)
 
-    entries: list[
-        tuple[
-            int,
-            str,
-            str,
-            str,
-            str,
-            str,
-            str,
-            str,
-            str,
-            str,
-            str,
-            str,
-            str,
-            str,
-            str,
-            str,
-        ]
-    ] = []
+    blocks = parse_blocks()
+
+    entries: list[tuple] = []
+    range_saved: list = []  # [start, name_prefix, fields_2..14]
 
     with open(RAW / "UnicodeData.txt", encoding="utf-8") as f:
         for line in f:
@@ -88,22 +120,56 @@ def build(no_nerd_fonts: bool, no_fetch: bool) -> None:
                 continue
             name = fields[1]
             alt = fields[10].strip()
-            if name.startswith("<"):
-                if not alt:
-                    continue
-                name = alt
             try:
                 codepoint = int(fields[0], 16)
             except ValueError:
                 continue
+
+            # <First, Last> range markers
+            if name.startswith("<") and "First" in name:
+                if 0xD800 <= codepoint <= 0xDFFF or 0xE000 <= codepoint <= 0xF8FF or codepoint >= 0xF0000:
+                    range_saved.clear()
+                    continue
+                range_name = name.split(",")[0].lstrip("<").strip()
+                range_saved = [
+                    codepoint, range_name,
+                    fields[2], fields[3], fields[4], fields[5],
+                    fields[6], fields[7], fields[8], fields[9],
+                    fields[10], fields[12], fields[13], fields[14],
+                ]
+                continue
+
+            if name.startswith("<") and "Last" in name:
+                if range_saved:
+                    start = range_saved[0]
+                    r_name = range_saved[1]
+                    for cp in range(start, codepoint + 1):
+                        block = block_for(cp, blocks)
+                        c_name = f"{r_name.upper()}-{cp:04X}"
+                        entries.append((
+                            cp, "", c_name, "unicode",
+                            range_saved[2], range_saved[3], range_saved[4], range_saved[5],
+                            range_saved[6], range_saved[7], range_saved[8], range_saved[9],
+                            range_saved[10], range_saved[11], range_saved[12], range_saved[13],
+                            block, "",
+                        ))
+                range_saved.clear()
+                continue
+
+            # Normal single entry
+            if name.startswith("<"):
+                if not alt:
+                    continue
+                name = alt
             if 0xD800 <= codepoint <= 0xDFFF:
                 continue
             if 0xE000 <= codepoint <= 0xF8FF:
                 continue
+            block = block_for(codepoint, blocks)
             entries.append(
                 (
                     codepoint,
-                    chr(codepoint),
+                    "",
                     name,
                     "unicode",
                     fields[2],
@@ -118,53 +184,71 @@ def build(no_nerd_fonts: bool, no_fetch: bool) -> None:
                     fields[12],
                     fields[13],
                     fields[14],
+                    block,
+                    "",
                 )
             )
-
     if not no_nerd_fonts:
         with open(RAW / "glyphnames.json", encoding="utf-8") as f:
             data = json.load(f)
-        for key, val in data.items():
-            if key == "METADATA":
-                continue
-            try:
-                codepoint = int(val["code"], 16)
-                glyph = val["char"]
-            except (KeyError, ValueError):
-                continue
-            if not glyph:
-                continue
-            name = key.replace("-", " ").replace("_", " ").upper()
-            entries.append(
-                (
-                    codepoint,
-                    glyph,
-                    name,
-                    "nerdfonts",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
+            for key, val in data.items():
+                if key == "METADATA":
+                    continue
+                try:
+                    codepoint = int(val["code"], 16)
+                    glyph = val["char"]
+                except (KeyError, ValueError):
+                    continue
+                if not glyph:
+                    continue
+                name = key.replace("-", " ").replace("_", " ").upper()
+                icon_set = key.split("-")[0]
+                entries.append(
+                    (
+                        codepoint,
+                        glyph,
+                        name,
+                        "nerdfonts",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "PUA",
+                        icon_set,
+                    )
                 )
-            )
 
     entries.sort(key=lambda e: e[0])
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
+    HEADER = [
+        "codepoint", "glyph", "name", "source", "category",
+        "combining", "bidi", "decomp", "decimal", "digit",
+        "numeric", "mirrored", "alt_name", "uppercase",
+        "lowercase", "titlecase", "block", "icon_set",
+    ]
     with open(OUT, "w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t")
+        writer.writerow(HEADER)
         for entry in entries:
             writer.writerow(entry)
 
+    blocks_tsv = ROOT / "data" / "blocks.tsv"
+    with open(blocks_tsv, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t")
+        for start, end, name in blocks:
+            writer.writerow((f"{start:04X}", f"{end:04X}", name))
+
     print(f"done, {len(entries)} entries -> {OUT}")
+    print(f"done, {len(blocks)} blocks -> {blocks_tsv}")
 
 
 def main() -> None:

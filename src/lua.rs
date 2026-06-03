@@ -1,17 +1,19 @@
 use mlua::prelude::*;
 
 use crate::Sort;
-use crate::corpus::{self, entries};
+use crate::corpus::{
+    self, FIELD_GLYPH, codepoint, entry_category, entry_name, entry_source, entry_str,
+};
 use crate::frecency::Frecency;
 use crate::search;
 
-fn entry_to_table(lua: &Lua, m: &search::Match<'_>) -> LuaResult<LuaTable> {
+fn entry_to_table(lua: &Lua, m: &search::Match) -> LuaResult<LuaTable> {
     let t = lua.create_table()?;
-    t.set("codepoint", m.entry.codepoint)?;
-    t.set("glyph", m.entry.glyph)?;
-    t.set("name", m.entry.name)?;
-    t.set("source", m.entry.source)?;
-    t.set("category", m.entry.category)?;
+    t.set("codepoint", codepoint(m.idx))?;
+    t.set("glyph", entry_str(m.idx, FIELD_GLYPH))?;
+    t.set("name", entry_name(m.idx))?;
+    t.set("source", entry_source(m.idx))?;
+    t.set("category", entry_category(m.idx))?;
     t.set("score", m.score)?;
     t.set("freq", m.freq)?;
     Ok(t)
@@ -29,7 +31,7 @@ fn do_search(lua: &Lua, (query, opts): (String, LuaTable)) -> LuaResult<LuaTable
     };
 
     let frecency = Frecency::load();
-    let results = search::search(&query, entries(), &frecency, limit, max_typos, sort);
+    let results = search::search_all(&query, &frecency, limit, max_typos, sort);
     let out = lua.create_table()?;
     for (i, m) in results.iter().enumerate() {
         out.set(i + 1, entry_to_table(lua, m)?)?;
@@ -40,10 +42,10 @@ fn do_search(lua: &Lua, (query, opts): (String, LuaTable)) -> LuaResult<LuaTable
 fn lookup(lua: &Lua, query: String) -> LuaResult<Option<LuaTable>> {
     let frecency = Frecency::load();
     match corpus::lookup_str(&query) {
-        Some(entry) => {
-            let freq = u32::min(frecency.get(entry.codepoint), u16::MAX as u32) as u16;
+        Some(idx) => {
+            let freq = u32::min(frecency.get(codepoint(idx)), u16::MAX as u32) as u16;
             let m = search::Match {
-                entry,
+                idx,
                 score: 0,
                 freq,
             };

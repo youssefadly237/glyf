@@ -15,5 +15,5 @@ bench-cli:
 
 clean:
     cargo clean
-    rm -f data/corpus.tsv
+    rm -f data/corpus.tsv data/blocks.tsv
     rm -rf data/raw
