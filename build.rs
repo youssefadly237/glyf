@@ -226,6 +226,9 @@ fn write_category_codes(out: &Path, header: &[&str], lines: &[Vec<&str>]) {
     codes.dedup();
     let mut s = String::from("pub(crate) const CATS: &[Cat] = &[\n");
     for &code in &codes {
+        if code.is_empty() {
+            continue;
+        }
         let desc = match code {
             "Lu" => "Uppercase Letter",
             "Ll" => "Lowercase Letter",

@@ -31,35 +31,41 @@ Records are persisted to `$XDG_DATA_HOME/glyf/frecency.bin`
 
 ### Lua module
 
-Build with `cargo build --features mlua --release` to produce `libglyf.so`.
+Build with `cargo build --features mlua --release`:
 
 ```lua
 local glyf = require("glyf")
 
--- fuzzy search; opts: limit (50), max_typos (nil = no limit), sort (relevance/name/codepoint)
+-- search: fuzzy name search with filters
 glyf.search("lua", { limit = 10, sort = "name" })
+glyf.search("", { block = "Arrows", category = "So" })
+glyf.search("heart", { source = "nerdfonts", icon_set = "fa" })
 
 -- lookup by codepoint string: U+0041, 0x279F, A, etc.
 glyf.lookup("U+1F600")
+glyf.lookup_name(codepoint)       -- name for a codepoint
+glyf.category_of(codepoint)       -- general category
+glyf.block_of(codepoint)          -- Unicode block name
 
--- record a pick in frecency db
-glyf.record(0x1F600)
+-- list metadata
+glyf.blocks()                     -- all Unicode blocks
+glyf.categories()                 -- all general categories
+glyf.sources()                    -- all sources (unicode, nerdfonts)
+glyf.icon_sets()                  -- all icon sets with descriptions
 
--- get frecency count for a codepoint
-glyf.frecency_get(0x0041)
-
--- path to frecency db file
-glyf.frecency_path()
+-- frecency
+glyf.record(0x1F600)              -- record a pick
+glyf.frecency_get(0x0041)         -- get frecency count
+glyf.frecency_path()              -- path to frecency db file
 ```
 
 ### Neovim plugin
 
-coming soon
+[glyf.nvim](https://github.com/youssefadly237/glyf.nvim) - floating-window picker with live search, `@tag` filtering, and frecency.
 
 ## Planned
 
 - Emoji (emoji-data.txt + CLDR annotations keywords)
-- ratatui TUI
 - Reverse lookup for multi-character strings
 
 ## Data

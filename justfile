@@ -7,6 +7,10 @@ gen-unicode:
 check:
     cargo clippy
 
+test-lua:
+    cargo build --features mlua
+    luajit tests/lua/test_glyf.lua target/debug
+
 bench:
     cargo bench
 
